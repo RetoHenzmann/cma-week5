@@ -1,0 +1,131 @@
+---
+title: "cma-week5"
+format: html
+editor: visual
+---
+
+```{r}
+library("readr")
+library("dplyr")
+library("sf")
+library("ggplot2")
+```
+
+# Creating Functions
+
+The first step in writing a function, is picking a name and assigning `<- function(){}` to it.
+
+```{r}
+testfun <- function(){}
+
+testfun()
+
+class(testfun)
+```
+
+To make the function actually *do* something, we need to specify *what* should be done within the curly brackets `{}`. The following function always prints the same statement and accepts no input values:
+
+```{r}
+testfun <- function() {
+    print("this function does nothing")
+}
+
+testfun()
+```
+
+If we want the function to accept some input values, we have to define them within the round brackets. For example, I specify a variable named `sometext` and can call this variable within the execution.
+
+```{r}
+testfun <- function(sometext) {
+    print(sometext)
+}
+
+testfun(sometext = "this function does slightly more, but still not much")
+```
+
+Let's take a more practical example. Say we want a function that calculates our age if provided with the date of our birthday. We can use `Sys.time()` to provide today's date and `difftime()` to calculate the time difference between today and our birthday.
+
+```{r}
+my_age <- function(birthday, output_unit) {
+    difftime(Sys.time(), birthday, units = output_unit)
+}
+
+my_age(birthday = "1997-04-23", output_unit = "days")
+
+my_age("1997-03-01", "days")
+```
+
+If we want any of our parameters to have default value, we can assign an initial value to the parameter when declaring the variables within the round brackets.
+
+```{r}
+my_age <- function(birthday, output_unit = "days") {
+    difftime(Sys.time(), birthday, units = output_unit)
+}
+
+# if not stated otherwise, our function uses the unit "days"
+my_age("1997-03-01")
+
+#we can still overwrite the units
+
+my_age("1997-03-01", "weeks")
+```
+
+# Task 1: Create your own functions:
+
+1.  Calculate BMI based on a person's height and weight
+
+```{r}
+bmi <- function(weight, height) {
+  print(weight/(height)^2)
+}
+
+bmi(70, 1.75)
+```
+
+2.  Calculate Degrees Farenheight based on Degrees Celcius
+
+```{r}
+farenheit <- function(celsius) {
+  print((celsius * 9/5)+32)
+}
+
+farenheit(25)
+```
+
+# Task 2: Prepare Analysis
+
+In the next tasks we will look for "meet" patterns in our wild boar data. To simplify this, we will only use a subset of our wild boar data: The individuals *Rosa* and *Sabi* for the timespan *01.04.2015 - 15.04.2015*. You can download the dataset here [wildschwein_BE_2056.csv](https://moodle.zhaw.ch/mod/folder/view.php?id=1192125) and filter it with the aforementioned criteria.
+
+```{r}
+wildschwein <- read.csv("wildschwein_BE_2056.csv", header = TRUE, sep = ",")
+
+# Konvertieren der date-Spalte in das Datum-Format
+wildschwein <- wildschwein %>%
+  mutate(date = as.Date(DatetimeUTC, format = "%Y-%m-%d"))
+
+# Filtern und Konvertieren in ein sf-Objekt
+d1 <- wildschwein %>%
+  filter((TierName %in% c("Rosa", "Sabi")) & 
+         (date >= as.Date("2015-04-01")) & 
+         (date <= as.Date("2015-04-15"))) %>%
+  st_as_sf(coords = c("E", "N"), crs = 2056, remove = FALSE)
+
+```
+
+# Task 3: Create a Join Key
+
+The task is therfore to round the minutes of `DatetimeUTC` to a multiple of 15 (00, 15, 30,45) and store the values in a new column[1](https://computationalmovementanalysis.github.io/FS24/Week5/2_tasks_and_inputs.html#fn1). You can use the `lubridate` function `round_date()` for this. See the examples [here](https://lubridate.tidyverse.org/reference/round_date.html) to see how this goes.
+
+```{r}
+library(lubridate)
+
+d1 <- d1 |> 
+  mutate(DatetimeUTC = ymd_hms(DatetimeUTC))
+
+d1 <- d1 |> 
+  mutate(DatetimeRound = round_date(DatetimeUTC, unit = "15 minutes"))
+
+head(d1)
+```
+
+# Task 4: Measuring distance at concurrent locations
