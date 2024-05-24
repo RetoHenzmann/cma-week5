@@ -92,6 +92,16 @@ farenheit <- function(celsius) {
 farenheit(25)
 ```
 
+3.  A function which calculates the (Euclidean) distance between two sets of coordinates (𝑥1, 𝑦1 and 𝑥2, 𝑦2) based on the formula below:
+
+```{r}
+euc_distance <- function(x1, y1, x2, y2) {
+  distance <- sqrt((x2 - x1)^2 + (y2 - y1)^2)
+  return(distance)
+}
+
+```
+
 # Task 2: Prepare Analysis
 
 In the next tasks we will look for "meet" patterns in our wild boar data. To simplify this, we will only use a subset of our wild boar data: The individuals *Rosa* and *Sabi* for the timespan *01.04.2015 - 15.04.2015*. You can download the dataset here [wildschwein_BE_2056.csv](https://moodle.zhaw.ch/mod/folder/view.php?id=1192125) and filter it with the aforementioned criteria.
@@ -129,3 +139,104 @@ head(d1)
 ```
 
 # Task 4: Measuring distance at concurrent locations
+
+To measure the distance between concurrent locations, we need to follow the following steps.
+
+1.  Split the `wildschwein_filter` object into one `data.frame` per animal
+
+```{r}
+d_sabi <- d1 |> 
+  filter(TierName == "Sabi")
+
+d_rosa <- d1 |> 
+  filter(TierName == "Rosa")
+
+# Konvertieren der sf-Objekte in DataFrames
+rosa_df <- st_drop_geometry(d_rosa)
+sabi_df <- st_drop_geometry(d_sabi)
+```
+
+1.  Join\* these datasets by the new `Datetime` column created in the last task. The joined observations are *temporally close*.
+
+```{r}
+d_joined <- inner_join(sabi_df, rosa_df, by = "DatetimeRound", suffix = c("_Sabi", "_Rosa"))
+```
+
+1.  In the joined dataset, calculate Euclidean distances between concurrent observations and store the values in a new column
+
+```{r}
+# Distance berechnen mit der Funktion aus Task 1.3
+
+d_joined <- d_joined |> 
+  mutate(distance = euc_distance(E_Sabi, N_Sabi, E_Rosa, N_Rosa))
+```
+
+1.  Use a reasonable threshold on `distance` to determine if the animals are also *spatially close* enough to constitute a *meet* (we use 100 meters). Store this Boolean information (`TRUE`/`FALSE`) in a new column
+
+```{r}
+d_joined <- d_joined |> 
+  mutate(meet = distance <= 100)
+```
+
+# Task 5: Visualize Data
+
+Now, visualize the *meets* spatially in a way that you think reasonable. For example in the plot as shows below. To produce this plot we:
+
+-   Used the individual dataframes from `rosa` and `sabi` (from the previous task)
+
+-   Used the joined dataset (also from the previous task), filtered to only the meets
+
+-   Manually changed the x and y axis limits
+
+```{r}
+# Joined Dataset so filtern, dass wir nur noch die Info zu Meet haben
+
+meet <- d_joined |> 
+  filter(meet == TRUE)
+
+# Dann den Plot erstellen
+
+plot_meets <- ggplot() +
+  #geom_path(data = d_rosa, aes(x = E, y = N), color = "blue", alpha = 0.6) +
+  geom_point(data = d_rosa, aes(x = E, y = N), color = "blue", size = 1, alpha = 0.6) +
+  # Sabi's Bewegungen
+  #geom_path(data = d_sabi, aes(x = E, y = N), color = "red", alpha = 0.6) +
+  geom_point(data = d_sabi, aes(x = E, y = N), color = "red", size = 1, alpha = 0.6) +
+  # Meets
+  geom_point(data = meet, aes(x = E_Rosa, y = N_Rosa), color = "green", size = 3) +
+  geom_point(data = meet, aes(x = E_Sabi, y = N_Sabi), color = "green", size = 3) +
+  # Achsenlimits (manuell angepasst)
+  xlim(min(wildschwein$E), max(wildschwein$E)) +
+  ylim(min(wildschwein$N), max(wildschwein$N)) +
+  # Titel und Achsenbeschriftungen
+  ggtitle("Bewegungen und Treffen von Rosa und Sabi") +
+  xlab("E") + ylab("N") +
+  theme_minimal()
+
+plot_meets
+  
+```
+
+# Task 6: 
+
+```{r}
+install.packages("plotly")
+
+library(plotly)
+
+fig <- plot_ly() |> 
+  # Rosa's Bewegungen
+  add_trace(data = d_rosa, x = ~E, y = ~N, z = ~DatetimeUTC, type = 'scatter3d', mode = 'lines+markers',
+            line = list(color = 'blue'), marker = list(size = 1, color = 'blue'), name = 'Rosa') %>%
+  # Sabi's Bewegungen
+  add_trace(data = d_sabi, x = ~E, y = ~N, z = ~DatetimeUTC, type = 'scatter3d', mode = 'lines+markers',
+            line = list(color = 'red'), marker = list(size = 1, color = 'red'), name = 'Sabi') %>%
+  # Meets
+  add_trace(data = meet, x = ~E_Rosa, y = ~N_Rosa, z = ~DatetimeUTC_Sabi, type = 'scatter3d', mode = 'markers',
+            marker = list(size = 7, color = 'green', symbol = 'circle'), name = 'Meet Points') %>%
+  layout(scene = list(xaxis = list(title = 'E'),
+                      yaxis = list(title = 'N'),
+                      zaxis = list(title = 'Time')))
+
+fig
+```
